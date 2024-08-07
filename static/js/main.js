@@ -40,6 +40,53 @@ const app = (() => {
   const MIN_QUERY_ZOOM = 12
   let mapMarker = null
 
+  //////////////////////////////////////////////////////////////////////// Components
+  const loadingIcon = () => `<img alt="${getText('loading')}" src=${LOADING_GIF}>`
+
+  //////////////////////////////////////////////////////////////////////// Language handling
+  const language = new URLSearchParams(window.location.search).get("lang") || navigator.language
+  const messages = {
+    'en': {
+      'rivers': 'Rivers',
+      'reachid': 'River ID',
+      'forecast': 'Forecast',
+      'retro': 'Retrospective',
+      'loading': 'Loading',
+      'ready': 'Ready',
+      'fail': 'Failed',
+      'clear': 'none',
+      'findRiverSegment': 'Identifying river segment. Charts will load soon.',
+      'loadStreams': 'The map is still loading streams. Charts will load soon.',
+      'errorQueryRiver': 'Error querying river number. Please try again.',
+      'riverNotFound': 'River not found. Try to zoom in and be precise when clicking the stream.',
+      'retryGetForecast': 'Retrieve Forecast Data',
+      'retryGetRetrospective': 'Retrieve Retrospective Data',
+      'chartTitleForecast': 'River Forecast for ',
+      'chartLabelDateUTC': 'Date (UTC +00:00)',
+      'chartLabelDischarge': 'Discharge (m³/s)',
+    },
+    'es': {
+      'rivers': 'Ríos',
+      'reachid': 'ID del río',
+      'forecast': 'Pronóstico',
+      'retro': 'Retrospectivo',
+      'loading': 'Cargando',
+      'ready': 'Listo',
+      'fail': 'Fallido',
+      'clear': 'ninguno',
+      'findRiverSegment': 'Identificando segmento del río. Los gráficos se cargarán pronto.',
+      'loadStreams': 'El mapa todavía está cargando los arroyos. Los gráficos se cargarán pronto.',
+      'errorQueryRiver': 'Error al consultar el número de río. Por favor, inténtelo de nuevo.',
+      'riverNotFound': 'Río no encontrado. Intente hacer zoom y sea preciso al hacer clic en el arroyo.',
+      'retryGetForecast': 'Recuperar Datos de Pronóstico',
+      'retryGetRetrospective': 'Recuperar Datos Retrospectivos',
+      'chartTitleForecast': 'Pronóstico de río para ',
+      'chartLabelDateUTC': 'Fecha (UTC +00:00)',
+      'chartLabelDischarge': 'Descarga (m³/s)',
+    },
+  }
+  const getText = key => messages[language]?.[key] || messages['en'][key]
+
   //////////////////////////////////////////////////////////////////////// Leaflet Map
   const m = L.map("map", {
     zoom: 3,
@@ -150,7 +197,7 @@ const app = (() => {
     .layers(
       basemapsJson,
       {
-        "Stream Network": esriStreamLayer,
+        "Rivers": esriStreamLayer,
       },
       {collapsed: true}
     )
@@ -180,14 +227,14 @@ const app = (() => {
           .run((error, featureCollection) => {
             if (error) {
               updateStatusIcons({reachid: "fail"})
-              M.toast({html: "Error querying river number. Please try again.", classes: "red", displayDuration: 5000})
+              M.toast({html: getText("errorQueryRiver"), classes: "red", displayDuration: 5000})
               console.error(error)
               return
             }
             REACHID = featureCollection?.features[0]?.properties["TDX Hydro Link Number"]
             if (REACHID === "Null" || !REACHID || !featureCollection.features[0].geometry) {
               updateStatusIcons({reachid: "fail"})
-              M.toast({html: "River not found. Try to zoom in and be precise when clicking the stream.", classes: "red", displayDuration: 5000})
+              M.toast({html: getText("riverNotFound"), classes: "red", displayDuration: 5000})
               console.error(error)
               return
             }
@@ -217,13 +264,6 @@ const app = (() => {
     checkboxLoadRetro.checked ? getRetrospectiveData() : giveRetrospectiveRetryButton(REACHID)
   }
 
-  const setReachID = () => {
-    REACHID = prompt("Please enter a 9 digit River ID to search for.")
-    if (!REACHID) return
-    if (!/^\d{9}$/.test(REACHID)) return alert("River ID numbers should be 9 digit numbers") // check that it is a 9 digit number
-    fetchData(parseInt(REACHID))
-  }
-
   //////////////////////////////////////////////////////////////////////// UPDATE DOWNLOAD LINKS FUNCTION
   const updateDownloadLinks = type => {
     if (type === "clear") {
@@ -239,7 +279,7 @@ const app = (() => {
   const getForecastData = reachID => {
     REACHID = reachID ? reachID : REACHID
     if (!REACHID) return
-    chartForecast.innerHTML = `<img alt="loading signal" src=${LOADING_GIF}>`
+    chartForecast.innerHTML = `<img alt="loading" src=${LOADING_GIF}>`
     updateStatusIcons({forecast: "load"})
     fetch(
       `${REST_ENDPOINT}/forecast/${REACHID}/?format=json&date=${inputForecastDate.value.replaceAll("-", "")}`
@@ -298,7 +338,7 @@ const app = (() => {
     if (!REACHID) return
     updateStatusIcons({retro: "load"})
     updateDownloadLinks("clear")
-    chartRetro.innerHTML = `<img alt="loading signal" src=${LOADING_GIF}>`
+    chartRetro.innerHTML = `<img alt="loading" src=${LOADING_GIF}>`
     fetch(
       `${REST_ENDPOINT}/retrospective/${REACHID}/?format=json`
     )
@@ -336,16 +376,16 @@ const app = (() => {
       let message
       switch (loadingStatus[key[0]]) {
         case "load":
-          message = key[0] === "reachid" ? "Identifying" : "Loading"
+          message = key[0] === "reachid" ? getText("statusIdentifying") : getText("statusLoading")
           break
         case "ready":
-          message = key[0] === "reachid" ? REACHID : "Ready"
+          message = key[0] === "reachid" ? REACHID : getText("statusReady")
           break
         case "fail":
-          message = "Failed"
+          message = getText("statusFail")
           break
         case "clear":
-          message = "none"
+          message = getText("statusClear")
       }
       return `<span class="status-${loadingStatus[key[0]]}">${key[1]}: ${message}</span>`
     }).join(' - ')
@@ -368,11 +408,11 @@ const app = (() => {
 
   const giveForecastRetryButton = reachid => {
     clearChartDivs({chartTypes: "forecast"})
-    chartForecast.innerHTML = `<button class="btn btn-warning" onclick="app.getForecastData(${reachid})">Retry Retrieve Forecast</button>`
+    chartForecast.innerHTML = `<button class="btn btn-warning" onclick="app.getForecastData(${reachid})">${getText("retryGetForecast")}</button>`
   }
   const giveRetrospectiveRetryButton = reachid => {
     clearChartDivs({chartTypes: "historical"})
-    chartRetro.innerHTML = `<button class="btn btn-warning" onclick="app.getRetrospectiveData(${reachid})">Retrieve Retrospective Data</button>`
+    chartRetro.innerHTML = `<button class="btn btn-warning" onclick="app.getRetrospectiveData(${reachid})">${getText("retryGetRetrospective")}</button>`
   }
 
   const clearMarkers = () => {
@@ -382,6 +422,5 @@ const app = (() => {
     clearMarkers,
     getForecastData,
     getRetrospectiveData,
-    setReachID,
   }
 })()
